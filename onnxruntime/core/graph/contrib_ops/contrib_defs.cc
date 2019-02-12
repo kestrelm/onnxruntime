@@ -736,10 +736,6 @@ if the input is 8 bits or in 64 bits if the input is 16 bits.)DOC")
 
         convPoolShapeInference(ctx, true, false, 0, 3);
       });
-      
-    
-          
-
 
   ONNX_CONTRIB_OPERATOR_SCHEMA(ConvInteger)
       .SetDomain(kMSDomain)
@@ -1011,6 +1007,15 @@ The bounding box coordinates corresponding to the selected indices can then be o
         updateOutputShape(ctx, 0, input_shape);
       });
 
+  static const char* StringNormalizer_ver10_doc = R"DOC(
+StringNormalization performs string operations for basic cleaning. 
+This operator has only one input (denoted by X) and only one output 
+(denoted by Y). This operator first examines the elements in the X, 
+and removes elements specified in "stopwords" attribute. 
+After removing stop words, the intermediate result can be further lowercased, 
+uppercased, or just returned depending the "case_change_action" attribute.
+)DOC";
+
   ONNX_CONTRIB_OPERATOR_SCHEMA(StringNormalizer)
       .SetDomain(kMSDomain)
       .SinceVersion(1)
@@ -1021,28 +1026,60 @@ The bounding box coordinates corresponding to the selected indices can then be o
           {"tensor(string)"},
           "Input/Output is a string tensor")
       .Attr(
-          "casechangeaction",
-          "string enum that cases output to be lowercased/uppercases/unchanged. Valid values are \"LOWER\", \"UPPER\", \"NONE\"",
-          AttributeProto::STRING)
+          std::string("case_change_action"),
+          std::string(
+              "string enum that cases output to be lowercased/uppercases/unchanged."
+              " Valid values are \"LOWER\", \"UPPER\", \"NONE\". Default is \"NONE\""),
+          AttributeProto::STRING,
+          std::string("NONE"))
       .Attr(
-          "is_case_sensitive",
-          "Boolean. Whether the identification of stop words in X is case-sensitive.",
-          AttributeProto::INT)
+          std::string("is_case_sensitive"),
+          std::string(
+              "Boolean. Whether the identification of stop words in X is case-sensitive. Default is false"),
+          AttributeProto::INT,
+          static_cast<int64_t>(0))
       .Attr(
           "stopwords",
-          "List of stop words",
+          "List of stop words. If not set, no word would be removed from X.",
           AttributeProto::STRINGS,
           OPTIONAL)
       .Attr(
           "locale",
-          "Environment dependent string that denotes the locale according to which output strings needs to be upper/lowercased. Default en_US",
+          "Environment dependent string that denotes the locale according to which output strings needs to be upper/lowercased."
+          "Default en_US or platform specific equivalent as decided by the implementation.",
           AttributeProto::STRING,
           OPTIONAL)
+      .SetDoc(StringNormalizer_ver10_doc)
       .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        using namespace ONNX_NAMESPACE;
         auto output_elem_type = ctx.getOutputType(0)->mutable_tensor_type();
-        output_elem_type->set_elem_type(ONNX_NAMESPACE::TensorProto::STRING);
-      })
-      .SetDoc(R"DOC([optional] Step1: Remove elements in X if they match any of the stop words so that the output tensor will not contain any stop words. This operator only accepts [C]- and [1, C]-tensors. If all elements in X are dropped, the output will be the default value of string tensor with shape [1] if input shape is [C] and shape [1, 1] if input shape is [1, C].)DOC");
+        output_elem_type->set_elem_type(TensorProto::STRING);
+        if (!hasInputShape(ctx, 0)) {
+          return;
+        }
+        TensorShapeProto output_shape;
+        auto& input_shape = ctx.getInputType(0)->tensor_type().shape();
+        auto dim_size = input_shape.dim_size();
+        // Last axis dimension is unknown if we have stop-words since we do
+        // not know how many stop-words are dropped
+        if (dim_size == 1) {
+          // Unknown output dimension
+          output_shape.add_dim();
+        } else if (dim_size == 2) {
+          // Copy B-dim
+          auto& b_dim = input_shape.dim(0);
+          if (!b_dim.has_dim_value() || b_dim.dim_value() != 1) {
+            fail_shape_inference(
+                "Input shape must have either [C] or [1,C] dimensions where C > 0");
+          }
+          *output_shape.add_dim() = b_dim;
+          output_shape.add_dim();
+        } else {
+          fail_shape_inference(
+              "Input shape must have either [C] or [1,C] dimensions where C > 0");
+        }
+        updateOutputShape(ctx, 0, output_shape);
+      });
 
   ONNX_CONTRIB_OPERATOR_SCHEMA(GatherND)
       .SetDomain(kMSDomain)

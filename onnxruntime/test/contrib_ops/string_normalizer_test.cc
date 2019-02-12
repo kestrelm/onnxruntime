@@ -22,7 +22,7 @@ void InitTestAttr(OpTester& test, const std::string& casechangeaction,
                   bool iscasesensitive,
                   const std::vector<std::string>& stopwords,
                   const std::string& locale) {
-  test.AddAttribute("casechangeaction", casechangeaction);
+  test.AddAttribute("case_change_action", casechangeaction);
   test.AddAttribute("is_case_sensitive", int64_t{iscasesensitive});
   if (!stopwords.empty()) {
     test.AddAttribute("stopwords", stopwords);
@@ -40,17 +40,17 @@ TEST(ContribOpTest, StringNormalizerTest) {
   // - casesensitive approach
   // - no stopwords.
   // - No change case action
-  {
-    OpTester test("StringNormalizer", opset_ver, domain);
-    InitTestAttr(test, "NONE", true, {}, test_locale);
-    std::vector<int64_t> dims{2, 2};
-    std::vector<std::string> input = {std::string("monday"), std::string("tuesday"), std::string("wednesday"), std::string("thursday")};
-    test.AddInput<std::string>("T", dims, input);
-    std::vector<std::string> output(input);  // do the same for now
-    test.AddOutput<std::string>("Y", dims, output);
+  //{
+  //  OpTester test("StringNormalizer", opset_ver, domain);
+  //  InitTestAttr(test, "NONE", true, {}, test_locale);
+  //  std::vector<int64_t> dims{2, 2};
+  //  std::vector<std::string> input = {std::string("monday"), std::string("tuesday"), std::string("wednesday"), std::string("thursday")};
+  //  test.AddInput<std::string>("T", dims, input);
+  //  std::vector<std::string> output(input);  // do the same for now
+  //  test.AddOutput<std::string>("Y", dims, output);
 
-    test.Run(OpTester::ExpectResult::kExpectFailure, "Input dimensions are either[C > 0] or [1][C > 0] allowed");
-  }
+  //  test.Run(OpTester::ExpectResult::kExpectFailure, "Input dimensions are either[C > 0] or [1][C > 0] allowed");
+  //}
   // - casesensitive approach
   // - no stopwords.
   // - No change case action

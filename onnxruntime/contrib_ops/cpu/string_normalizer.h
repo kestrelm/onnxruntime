@@ -27,7 +27,7 @@ class StringNormalizer : public OpKernel {
 
  private:
   bool is_case_sensitive_;
-  CaseAction casechangeaction_;
+  CaseAction case_change_action_;
   CaseAction compare_caseaction_;  // used for case-insensitive compare
   std::string locale_name_;
   // Either if these are populated but not both

@@ -366,17 +366,6 @@ common::Status SaveInitializedTensors(const onnxruntime::Graph& graph,
                                                   mlvalue_name_idx_map, save_tensor_func, logger);
 }
 
-static common::Status CreateOpKernelInternal(const onnxruntime::Node& node,
-                                             const IExecutionProvider& exec_provider,
-                                             const SessionState& session_state,
-                                             const KernelRegistryManager& custom_registry_manager,
-                                             std::unique_ptr<OpKernel>& op_kernel) {
-  return custom_registry_manager.CreateKernel(node,
-                                              exec_provider,
-                                              session_state,
-                                              op_kernel);
-}
-
 static common::Status CreateOpKernel(const onnxruntime::Node& node,
                                      const ExecutionProviders& execution_providers,
                                      const SessionState& session_state,
@@ -387,17 +376,18 @@ static common::Status CreateOpKernel(const onnxruntime::Node& node,
 
   const IExecutionProvider* exec_provider = nullptr;
   if (exec_provider_name.empty() || (exec_provider = execution_providers.Get(exec_provider_name)) == nullptr) {
-    auto status = ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not create kernel for node: ", node.Name(),
-                                  " as there's no execution provider allocated.");
-    LOGS(logger, ERROR) << status.ErrorMessage();
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not create kernel for node: ", node.Name(),
+                           " as there's no execution provider allocated.");
   }
 
-  common::Status status = CreateOpKernelInternal(node, *exec_provider, session_state, custom_registry_manager,
-                                                 op_kernel);
-
+  common::Status status = custom_registry_manager.CreateKernel(node,
+                                                               *exec_provider,
+                                                               session_state,
+                                                               op_kernel);
   if (!status.IsOK()) {
-    LOGS(logger, ERROR) << "Kernel creation failed for node: "
-                        << node.Name() << " with error: " << status.ErrorMessage();
+    return common::Status(status.Category(), status.Code(),
+                          ::onnxruntime::MakeString("Kernel creation failed for node: ", node.Name(), " with error: ",
+                                                    status.ErrorMessage()));
   }
 
   return status;

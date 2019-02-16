@@ -43,10 +43,9 @@ Status CopyScatterData(const Tensor* data_input, const Tensor* indecies_input, c
     }
   }
 
+  const auto num_input_dims = input_data_shape.NumDimensions();
   const auto input_elements = input_data_shape.Size();
   const auto element_bytes = data_input->DataType()->Size();
-  const auto data_batch_bytes = input_data_shape.SizeFromDimension(axis) * element_bytes;
-  const size_t block_bytes = input_data_shape.SizeFromDimension(axis + 1) * element_bytes;
 
   const uint8_t* src_base = reinterpret_cast<const uint8_t*>(data_input->DataRaw());
   uint8_t* dst_base = reinterpret_cast<uint8_t*>(data_output->MutableDataRaw());
@@ -63,19 +62,51 @@ Status CopyScatterData(const Tensor* data_input, const Tensor* indecies_input, c
   }
 
   // Now poke updates
+  // TODO: Investigate how to re-use the input Tensor for the output
+  std::vector<int64_t> dim_weights(input_data_shape.GetDims().size(), 0);
+  dim_weights[num_input_dims - 1] = 1;
+  for (size_t i = num_input_dims - 2; i >= 0; --i) {
+    dim_weights[i] = input_data_shape[i] * dim_weights[i + 1];
+  }
+  // Initialize with zeros
+  std::vector<int64_t> counters(input_data_shape.GetDims().size(), 0);
   const uint8_t* update_data = reinterpret_cast<const uint8_t*>(updates_input->DataRaw());
-  for (int64_t index = 0; index < num_indices; ++index) {
-    Tin idx = indices_data[index];
-    // base + number of whole batches + offset within batch
-    // depending on the axis position
-    auto dst_offset = data_batch_bytes + idx * block_bytes;
+  auto current_ind = indices_data;
+  const auto end_indices = indices_data + indecies_input->Shape().Size();
+  while (current_ind != end_indices) {
+    const Tin idx = *current_ind;
+    // Compute offset to destination
+    size_t dst_offset = 0;
+    for (size_t i = 0; i < num_input_dims - 1; ++i) {
+      if (i == size_t(axis)) {
+        dst_offset += idx * dim_weights[i];
+      } else {
+        dst_offset += counters[i] * dim_weights[i];
+      }
+    }
+    dst_offset += counters[num_input_dims - 1];
+
     if (is_string_type) {
-      reinterpret_cast<std::string*>(dst_base)[dst_offset / element_bytes] =
+      reinterpret_cast<std::string*>(dst_base)[dst_offset] =
           reinterpret_cast<const std::string*>(update_data)[idx];
     } else {
       // Copy the element
-      memcpy(dst_base + dst_offset, update_data + element_bytes * idx, block_bytes);
+      auto dst_offset_bytes = dst_offset * element_bytes;
+      auto update_offset_bytes = idx * element_bytes;
+      memcpy(dst_base + dst_offset_bytes, update_data + update_offset_bytes, element_bytes);
     }
+    // Increment the counters
+    for (size_t i = num_input_dims - 1; i >= 0; --i) {
+      auto val = ++counters[i];
+      if (val == input_data_shape[i]) {
+        // Should not carry on the biggest dim
+        assert(i != 0);
+        counters[i] = 0;
+      } else {
+        break;
+      }
+    }
+    ++current_ind;
   }
   return Status::OK();
 }
